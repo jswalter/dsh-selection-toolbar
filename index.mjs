@@ -9,6 +9,26 @@ export const name = 'selection-toolbar';
 export const inject = ['llm', 'agentDefaultModel'];
 const root = dirname(fileURLToPath(import.meta.url));
 
+// Generic protocol overrides bypass the host's built-in OpenCode header wrapper.
+// Scope this fallback to our own conversation and leave other plugins' calls alone.
+export function registerOpenCodeHeaders(ctx, engine) {
+  return ctx.on('llm-pi-ai/request-headers', (request, headers, next) => {
+    const sessionId = engine.conversation?.id;
+    if (sessionId && request.sessionId === sessionId) {
+      let openCode = request.provider === 'opencode' || request.provider === 'opencode-go';
+      if (!openCode) {
+        try {
+          const url = new URL(request.baseURL);
+          openCode = ['https:', 'http:'].includes(url.protocol)
+            && (url.hostname === 'opencode.ai' || url.hostname.endsWith('.opencode.ai'));
+        } catch { /* Other providers may have no URL or an unresolved URL template. */ }
+      }
+      if (openCode && !headers.has('x-opencode-session')) headers.set('x-opencode-session', sessionId);
+    }
+    return next();
+  });
+}
+
 // Use the host catalog, including external provider adapters and lazy discovery.
 export async function modelCatalog(llm) {
   const providers = llm.listProviders();
@@ -63,6 +83,7 @@ export async function apply(ctx, config = {}) {
         await appendFile(join(dataRoot, 'conversations', `${id}.jsonl`), `${JSON.stringify({ time: new Date().toISOString(), ...record })}\n`, { mode: 0o600 });
       },
     });
+    const disposeHeaders = registerOpenCodeHeaders(ctx, engine);
     let requests = Promise.resolve();
     let generation = 0;
     async function catalog() {
@@ -102,6 +123,7 @@ export async function apply(ctx, config = {}) {
     helper.on('exit', () => { engine.clear(); if (!disposed) ctx.logger?.info('selection-toolbar: helper exited'); });
     return () => {
       disposed = true;
+      disposeHeaders();
       engine.clear();
       helper.stdin.end();
       helper.kill('SIGTERM');

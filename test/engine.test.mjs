@@ -111,6 +111,27 @@ test('routing uses current default or explicit pair and selects off/least availa
   assert.equal(Object.hasOwn(none.calls[0].config, 'reasoningEffort'), false);
 });
 
+test('OpenCode conversation identity survives followups and failures, but resets for a new selection', async () => {
+  let fail = false;
+  const h = harness({ stream: async function* () {
+    yield* output('Answer', fail ? { kind: 'error', failure: { code: 'FIXTURE', message: 'failed' } } : { kind: 'stop' });
+  } });
+  await h.engine.run(ask({ route: { provider: 'opencode-go', model: 'fixture-model' } }));
+  const firstId = h.engine.conversation.id;
+  await h.engine.run(followup(h));
+  fail = true; await h.engine.run(followup(h));
+  fail = false; await h.engine.run(followup(h));
+  assert.ok(h.calls.every(call => call.request.sessionId === firstId));
+  assert.ok(h.journals.filter(entry => entry.record.type === 'request').every(entry => entry.record.sessionId === firstId));
+  // A new ask (including regeneration) creates a new conversation, even for the same selection.
+  await h.engine.run(ask({ route: { provider: 'opencode-go', model: 'fixture-model' } }));
+  assert.notEqual(h.calls.at(-1).request.sessionId, firstId);
+  assert.equal(h.calls.at(-1).request.sessionId, h.engine.conversation.id);
+  h.engine.clear();
+  await h.engine.run(ask());
+  assert.notEqual(h.calls.at(-1).request.sessionId, firstId);
+});
+
 test('successful followups retain history, failure retains last successful messages', async () => {
   let fail = false;
   const h = harness({ stream: async function* () { yield* output(fail ? 'partial' : 'Good', fail ? { kind: 'error', failure: { code: 'FIXTURE', message: 'failed' } } : { kind: 'stop' }); } });

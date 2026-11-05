@@ -155,7 +155,8 @@ export class ConversationEngine {
           const least = efforts.find(x => x.id === 'off') ?? efforts[0];
           return { ...controls, ...(least ? { reasoningEffort: least.id } : {}) };
         });
-      const request = { ...call.config, messages, system: systemPrompt(conversation), tools: [] };
+      // The host's OpenCode adapter uses this stable conversation identity for routing.
+      const request = { ...call.config, sessionId: conversation.id, messages, system: systemPrompt(conversation), tools: [] };
       await this.journal(conversation.id, { type: 'request', id, ...request });
       controller.signal.throwIfAborted();
       const assembler = new this.BlockAssembler();

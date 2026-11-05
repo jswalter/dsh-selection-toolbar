@@ -65,6 +65,7 @@ sh "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/node_modules/dsh-selection-toolbar/
 ## 数据与实现
 
 - DSH Cordis Host 插件通过受支持的 `ctx.llm.prepareCall` 调用已配置模型，不自行读取或复制 API Key。
+- OpenCode（Zen / Go）请求自动携带 `x-opencode-session`，同一划词对话及其追问复用会话 ID，重新生成或重新划词时使用新 ID。兼容内置服务商和指向 `opencode.ai` 及其子域名的自定义接口；已有同名请求头保留。自定义接口的补充请求头使用 DSH 0.2.2-rc.1 的公开请求头事件，仅作用于本插件的对话。
 - 回答区使用 WebKit 和随应用打包的 markdown-it 14.1.0，离线解析；不执行回答中的 HTML，不自动加载远程图片（显示图片说明）。点击普通网页链接时由系统浏览器打开。Markdown 渲染不改变模型提示词、思考深度或原始回答；依赖来源与许可证见 `native/Markdown/THIRD_PARTY.md`。
 - Swift/AppKit 辅助程序通过私有 stdin/stdout 管道与插件通信，不监听 HTTP 端口。选区只在辅助程序内暂存，点击操作才传给插件和模型；不提供模型工具，也不执行选中文字或模型返回的命令。
 - 提交后的请求与回答保存在 `~/.dsh/selection-toolbar/conversations/*.jsonl`（目录 0700、文件 0600）。记录包含选中文本与追问，便于核对请求；不会写入本源码目录，不会自动删除。对话记录独立于 DSH 主聊天列表，浮窗关闭后不能从插件界面恢复，可从 JSONL 查阅。

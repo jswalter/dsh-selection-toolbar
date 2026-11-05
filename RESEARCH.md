@@ -30,6 +30,12 @@
 
 本实现没有复制或安装上述第三方项目，不修改 DSH 应用包，不依赖 CDP 或私有 React/DOM 结构。
 
+## 2026-11-05 OpenCode 会话请求头
+
+[OpenCode Go 官方说明](https://opencode.ai/v2/docs/console/go/#where-can-i-use-it)要求每段对话发送稳定的 `x-opencode-session`，并以客户端自身的 User-Agent 标识请求。
+
+在 DSH Desktop 0.2.2-rc.1 中核对了 `@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-llm-pi-ai` 与 `@earendil-works/pi-ai`：`GenerateOptions.sessionId` 经内置 `opencode` / `opencode-go` 适配器转换为该请求头；自定义服务商或显式 `api` 覆盖会绕过内置包装器。本插件将划词对话 ID 传给 `sessionId`，并通过公开的 `llm-pi-ai/request-headers` 同步事件补齐后者的请求头。事件只处理本插件当前对话的 OpenCode 请求，按服务商 ID 或接口 URL 的主机名识别，保留已有同名头。User-Agent 由 DSH 统一提供，不伪装为其他客户端。
+
 ## 2026-10-30 编辑器兼容补充
 
 Electron 官方文档说明，macOS 辅助技术可通过 `AXManualAccessibility` 请求应用公开辅助功能树：https://github.com/electron/electron/blob/main/docs/tutorial/accessibility.md 。本插件对当前前台应用采用此方式。VS Code 的编辑区还受屏幕阅读器优化模式影响；当前插件对 VS Code 使用下文的原生复制取词。
