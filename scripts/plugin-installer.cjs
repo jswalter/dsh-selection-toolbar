@@ -75,7 +75,12 @@ async function main(kind, argv = process.argv.slice(2)) {
     if (!args.uninstall && !config.helperPath.endsWith(path.join('DSH Selection.app', 'Contents', 'MacOS', 'DSHSelection'))) throw new Error('Unsupported helperPath layout; expected DSH Selection.app/Contents/MacOS/DSHSelection');
   }
   const next = rewrite(old, def, config, yaml, args.uninstall);
-  const command = ['plugin', '--profile', 'desktop', args.uninstall ? 'remove' : 'add', ...(args.uninstall ? [def.package] : ['--ignore-scripts', `${def.package}@${specifier}`])];
+  // Re-adding the same Git specifier can reuse the old locked commit. Explicit
+  // update resolves the remote branch again while retaining its Git source.
+  const previousManifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  const updating = !args.local && previousManifest.dependencies?.[def.package] === specifier;
+  const operation = args.uninstall ? 'remove' : updating ? 'update' : 'add';
+  const command = ['plugin', '--profile', 'desktop', operation, ...(args.uninstall ? [def.package] : ['--ignore-scripts', updating ? def.package : `${def.package}@${specifier}`])];
   if (args['dry-run']) { console.log(JSON.stringify({ package: def.package, source: specifier, command, config, patch: patchFile }, null, 2)); return; }
   const backup = path.join(home, 'backups', `local-bundle-${kind}-${Date.now()}`);
   fs.mkdirSync(backup, { recursive: true, mode: 0o700 });
