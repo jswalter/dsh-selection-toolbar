@@ -1,0 +1,46 @@
+{
+  "name": "dsh-selection-toolbar",
+  "version": "0.1.9",
+  "private": true,
+  "type": "module",
+  "description": "macOS 全局划词：语法修正、翻译、解释、追问及原位替换，使用 DSH 模型路由。",
+  "main": "index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "index.mjs",
+    "engine.mjs",
+    "cordis.patch.yml",
+    "locale",
+    "icon.svg",
+    "native",
+    "scripts",
+    "test",
+    "install.command",
+    "README.md",
+    "RESEARCH.md",
+    "VALIDATION.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "sh scripts/test.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jswalter/dsh-selection-toolbar.git"
+  },
+  "homepage": "https://github.com/jswalter/dsh-selection-toolbar#readme",
+  "bugs": {
+    "url": "https://github.com/jswalter/dsh-selection-toolbar/issues"
+  }
+}
