@@ -118,7 +118,9 @@ async function main(kind, argv = process.argv.slice(2)) {
   fs.writeFileSync(temporary, next, { mode: 0o600 }); fs.renameSync(temporary, patchFile);
   const installed = JSON.parse(fs.readFileSync(manifestFile,'utf8'));
   const registered = installed.dsh?.profile?.bundles?.includes(def.package) ?? false;
-  if (registered === !!args.uninstall) throw new Error('Official bundle registration verification failed');
+  // Updating an intentionally disabled bundle preserves its disabled state.
+  const present = Object.hasOwn(installed.dependencies ?? {}, def.package);
+  if (args.uninstall ? (present || registered) : !present) throw new Error('Official package installation verification failed');
   console.log(JSON.stringify({ package: def.package, registered, source: specifier, backup }, null, 2));
 }
 module.exports = { main, rewrite, argumentsOf, definitions };
