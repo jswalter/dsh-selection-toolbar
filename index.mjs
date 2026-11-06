@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+import { settingsSchema } from './config.mjs';
 import { spawn } from 'node:child_process';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -5,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { ConversationEngine } from './engine.mjs';
 
+export const Config = settingsSchema(createRequire(import.meta.url)('@deepseek-ai/schemastery'));
 export const name = 'selection-toolbar';
 export const inject = ['llm', 'agentDefaultModel', 'settings'];
 const root = dirname(fileURLToPath(import.meta.url));

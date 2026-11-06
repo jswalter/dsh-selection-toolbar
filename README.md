@@ -49,7 +49,7 @@ sh "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/node_modules/dsh-selection-toolbar/
 3. 浮窗中可继续提问，或说明进一步修改要求。回答默认按 Markdown 渲染，支持标题、粗体、斜体、删除线、列表、引用、链接、代码块及表格；普通文本正常显示，流式回答会持续更新排版。每轮回答独立解析。“复制回答”和“替换原文”使用最后一轮的原始 Markdown，保留井号、星号、代码围栏等格式标记。“重新生成”按原选区开启新一轮对话。
 4. 在 **DSH 侧栏 → 插件 → AI 划词工具栏 → 划词设置** 中选择模型、启用/关闭全局划词及设置翻译默认语言，点击“保存设置”生效。工具栏/回答面板的“··· → 划词设置”保留模型快捷设置。默认跟随 DSH 当前默认模型；下拉列表直接读取所有已注册服务商的模型，包括外接服务商，按“服务商 · 模型名”区分同名项。可刷新列表。DSH 页面通过“保存设置”保存，浮窗快捷选择自动保存；两处同步至 DSH profile 配置。首次升级自动导入原有模型和语言偏好。切换模型后点击“重新生成”生效。为缩短等待，采用所选模型支持的最低思考等级；不修改 DSH 全局默认等级。
 5. 语法修正或翻译完整成功后，可点击“替换原文”。程序先核对原应用、可编辑控件、原窗口和仍选中的原文，能读取全文与 UTF-16 范围时同时核对它们，再执行编辑器原生粘贴并核实结果。原文已变、焦点指向别的控件、选区超过 15 分钟、回答失败/取消/截断时不会替换。
-6. 工具栏高 42 点，回答面板宽 400 点，短回答自动收缩，最高 352 点；长内容内部滚动。界面跟随系统明暗模式；回答面板顶部整条标题区可拖动，标题文字不支持框选，图钉和关闭按钮仍可点击。点外部关闭，图钉可固定面板。关闭浮窗会停止当前请求；在 DSH 插件设置中可暂停/恢复监控、刷新模型目录；停用插件会退出辅助程序，再次启用会重新启动。辅助程序也会随宿主退出而结束。
+6. 工具栏高 42 点，回答面板宽 400 点，短回答自动收缩，最高 352 点；长内容内部滚动。界面跟随系统明暗模式；回答面板顶部整条标题区可拖动，标题文字不支持框选，图钉和关闭按钮仍可点击。点外部关闭，图钉可固定面板。关闭浮窗会停止当前请求；在 DSH 插件设置中可启用/关闭划词、刷新模型目录；停用插件会退出辅助程序，再次启用会重新启动。辅助程序也会随宿主退出而结束。
 
 ## 兼容边界
 
@@ -71,7 +71,7 @@ sh "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/node_modules/dsh-selection-toolbar/
 - 提交后的请求与回答保存在 `~/.dsh/selection-toolbar/conversations/*.jsonl`（目录 0700、文件 0600）。记录包含选中文本与追问，便于核对请求；不会写入本源码目录，不会自动删除。对话记录独立于 DSH 主聊天列表，浮窗关闭后不能从插件界面恢复，可从 JSONL 查阅。
 - `~/.dsh/selection-toolbar/status.json` 保存最近一次权限、连接、暂停状态及前台应用标识，用于诊断；不包含选中文字或回答。
 - 设置通过 DSH 的公开 `plugins.bundle.config` / `plugins.row.config` 插槽显示，使用 Config volatile 字段持久化到 profile 的 `cordis.patch.yml`；修改实时同步给辅助程序；关闭划词时停止辅助程序和请求，设置页面继续可用。页面保存使用版本校验，冲突时保留草稿并提示重新载入。辅助程序仍保留偏好缓存以兼容旧版升级；不保存 API Key。
-- 源码：`host.mjs` / `config.mjs` 声明 DSH 配置，`client.js` 提供插件设置页面，`engine.mjs` 管理模型请求和对话，`index.mjs` 管理生命周期和管道，`native/ClipboardSelection.swift` 管理原生复制及剪贴板标记校验，`native/Selection.swift` 管理选区与替换，`native/main.swift` 管理浮窗、模型设置和权限说明，`native/Appearance.swift` 管理颜色、图标按钮、表面绘制与追问文字居中，`native/MarkdownView.swift` 和 `native/Markdown/` 管理 Markdown 显示。
+- 源码：`config.mjs` 声明 DSH 配置，`client.js` 提供插件设置页面，`engine.mjs` 管理模型请求和对话，`index.mjs` 管理生命周期和管道，`native/ClipboardSelection.swift` 管理原生复制及剪贴板标记校验，`native/Selection.swift` 管理选区与替换，`native/main.swift` 管理浮窗、模型设置和权限说明，`native/Appearance.swift` 管理颜色、图标按钮、表面绘制与追问文字居中，`native/MarkdownView.swift` 和 `native/Markdown/` 管理 Markdown 显示。
 - 手动执行 `sh scripts/build.sh` 会将应用写入本目录 `build/`，缓存默认放在 `build/.cache/`；可通过 `DSH_SELECTION_TMP` 指定缓存目录。GitHub 安装器在本机备份目录内临时构建，成功复制后清理临时产物。源码仓库不提交编译产物。
 
 ## 验证与卸载
