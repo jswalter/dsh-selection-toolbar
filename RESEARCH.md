@@ -63,3 +63,5 @@ Apple 文档说明 [全局事件监听的回调异步交付](https://developer.a
 ## 2026-11-06 插件详情设置
 
 核对本机 DSH 0.2.2-rc.1 的公开包文档和实现：`dsh-client-ui-plugin-manager` 提供按包名注册的 `plugins.bundle.config`，及按包名和行 ID 注册的 `plugins.row.config`；浏览器入口通过 manifest 的 `dsh.client` 和 `./client` 导出加载。`dsh-settings` 将 Config 的 `.volatile()` 字段投影为配置表单，`ctx.configForms.get(entryId).mutate(ops, revision)` 负责持久化和冲突检查。宿主通过 `loader/volatile-update` 接收实时配置变化；模型目录使用公开 `ctx.remote.session.modelCatalog()`。不修改 DSH 应用包、不注入页面 DOM。
+
+关闭划词时保留 Host 配置拥有者，只释放原生辅助程序并取消请求；快速开关等待旧进程结束再启动新进程。独立临时 profile 使用真实 Settings / ConfigEditor / Loader 验证持久化、宿主重启和不重新挂载的配置更新。

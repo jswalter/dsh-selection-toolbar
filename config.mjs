@@ -1,7 +1,7 @@
-// Kept separate so tests can use the schema shipped with the installed host.
 export function settingsSchema(z) {
   const language = () => z.union(['zh-Hans', 'zh-Hant', 'en', 'ja'].map(value => z.const(value)));
   return z.object({
+    enabled: z.boolean().default(true).volatile(),
     helperPath: z.string(),
     llmModule: z.string(),
     dataDir: z.string(),

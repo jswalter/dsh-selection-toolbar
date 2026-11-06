@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { access, appendFile, mkdir, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -8,6 +8,36 @@ import { ConversationEngine } from './engine.mjs';
 export const name = 'selection-toolbar';
 export const inject = ['llm', 'agentDefaultModel', 'settings'];
 const root = dirname(fileURLToPath(import.meta.url));
+
+// Serialize stop/start so rapid settings changes never leave two helpers running.
+// Keep this host plugin mounted while off so its settings form remains available.
+export function watchEnabled(ctx, enabled, start) {
+  return ctx.effect(() => {
+    let disposed = false;
+    let stop;
+    let pending = Promise.resolve();
+    function reconcile() {
+      pending = pending.then(async () => {
+        if (disposed) return;
+        if (enabled()) {
+          if (!stop) stop = start();
+        } else if (stop) {
+          const cleanup = stop; stop = undefined;
+          await cleanup();
+        }
+      }).catch(error => ctx.logger?.warn(`selection-toolbar: helper lifecycle failed (${error.code ?? 'UNKNOWN'})`));
+      return pending;
+    }
+    const unlisten = ctx.on('loader/volatile-update', reconcile);
+    void reconcile();
+    return async () => {
+      disposed = true;
+      unlisten();
+      await pending;
+      await stop?.();
+    };
+  }, 'macOS selection toolbar');
+}
 
 // Generic protocol overrides bypass the host's built-in OpenCode header wrapper.
 // Scope this fallback to our own conversation and leave other plugins' calls alone.
@@ -61,16 +91,16 @@ export function lineReader(onLine, onError, limit = 512000) {
 export async function apply(ctx, config = {}) {
   if (process.platform !== 'darwin') throw new Error('AI 划词工具栏目前支持 macOS');
   const executable = config.helperPath ?? join(root, 'build', 'DSH Selection.app', 'Contents', 'MacOS', 'DSHSelection');
-  await access(executable);
   const sdk = config.llmModule ? await import(pathToFileURL(config.llmModule).href) : await import('@deepseek-ai/dsh-llm');
   if (!sdk.BlockAssembler || !ctx.llm.prepareCall || !ctx.agentDefaultModel.currentSelection) throw new Error('DSH 接口不兼容，需要 0.2.2-rc.1 的模型及设置接口');
   const dataRoot = config.dataDir ?? join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'selection-toolbar');
   await mkdir(join(dataRoot, 'conversations'), { recursive: true, mode: 0o700 });
 
   ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber));
-  ctx.effect(() => {
+  watchEnabled(ctx, () => config.enabled?.get?.() ?? config.enabled ?? true, () => {
     let disposed = false;
     const helper = spawn(executable, ['--bridge'], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env } });
+    const closed = new Promise(resolve => helper.once('close', resolve));
     function emit(value) {
       if (!disposed && !helper.stdin.destroyed && helper.stdin.writable) helper.stdin.write(`${JSON.stringify(value)}\n`);
     }
@@ -128,15 +158,18 @@ export async function apply(ctx, config = {}) {
     helper.stdin.on('error', () => engine.cancel());
     helper.on('error', error => ctx.logger?.warn(`selection-toolbar: helper start failed (${error.code ?? 'UNKNOWN'})`));
     helper.on('exit', () => { engine.clear(); if (!disposed) ctx.logger?.info('selection-toolbar: helper exited'); });
-    return () => {
+    return async () => {
       disposed = true;
       disposeHeaders();
       preferences.dispose();
       engine.clear();
       helper.stdin.end();
       helper.kill('SIGTERM');
+      const force = setTimeout(() => helper.kill('SIGKILL'), 1500);
+      force.unref();
+      try { await closed; } finally { clearTimeout(force); }
     };
-  }, 'macOS selection toolbar');
+  });
 }
 
 // Both settings surfaces use the same persisted host preferences. Native writes

@@ -71,12 +71,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        guard bridge || demo else {
+            showMessage("请通过 DSH 插件启动", "请在 DeepSeek Harness 的插件管理中启用 AI 划词工具栏。")
+            NSApp.terminate(nil); return
+        }
         // Standard responder-chain shortcuts for the field editor and rendered text.
         let mainMenu = NSMenu()
-        let applicationItem = NSMenuItem(); let applicationMenu = NSMenu()
-        let quitItem = NSMenuItem(title: "退出划词工具栏", action: #selector(quitHelper), keyEquivalent: "q")
-        quitItem.target = self; applicationMenu.addItem(quitItem); applicationItem.submenu = applicationMenu
-        mainMenu.addItem(applicationItem)
+        let applicationItem = NSMenuItem(); applicationItem.submenu = NSMenu(); mainMenu.addItem(applicationItem)
         let editItem = NSMenuItem(); let editMenu = NSMenu(title: "编辑")
         for (title, selector, key) in [("撤销", "undo:", "z"), ("剪切", "cut:", "x"), ("复制", "copy:", "c"),
                                        ("粘贴", "paste:", "v"), ("全选", "selectAll:", "a")] {
@@ -109,7 +110,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
                 }
             }
         } else if !trusted { showPermission() }
-        else if !bridge { showMessage("请通过 DSH 插件启动", "辅助程序由 DSH 插件自动管理。请先安装插件并启动 DeepSeek Harness。") }
         timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in self?.tick() }
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 { self?.closePanel(); return nil }
@@ -152,7 +152,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         send(["type": "models"])
         if demo { populateModels() }
     }
-    @objc func quitHelper() { send(["type": "cancel"]); NSApp.terminate(nil) }
     @objc func openPermissions() {
         // Only user clicks request the OS permission dialog; never grant permission programmatically.
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
