@@ -30,6 +30,12 @@
 
 本实现没有复制或安装上述第三方项目，不修改 DSH 应用包，不依赖 CDP 或私有 React/DOM 结构。
 
+## 2026-11-06 DSH 设置与划词生命周期
+
+核对 DSH Desktop 0.2.2-rc.1 随应用提供的 `dsh-settings`、`dsh-client-ui-settings`、`dsh-client-modules` 和 `cordis-plugin-loader` 文档与实现：Host 的 `Config` 以 Schemastery `.volatile()` 声明可实时编辑字段，通过 `.get()` 读取；Loader 更新引用后向所属插件发送 `loader/volatile-update`，不会重新挂载该插件。设置页通过公开的 `settings.section` 插槽与 `ctx.configForms.get(entryId)` 读写配置；关闭划词时保留 Host 配置拥有者，只释放原生辅助程序和模型会话，因而仍可从设置中重新开启。设置持久化由 DSH ConfigEditor 完成。
+
+客户端按 `dsh.client` 清单及 `./client` 导出提供 lazy factory bundle，使用宿主共享的 React 和 Switch。已在独立临时 profile 中以真实 Settings / ConfigEditor / Loader 验证读取、写入、持久化和不重新挂载的更新流程，不修改用户的 DSH profile。原有侧栏“插件 → 已安装插件”的整包停用仍由宿主管理。
+
 ## 2026-11-05 OpenCode 会话请求头
 
 [OpenCode Go 官方说明](https://opencode.ai/v2/docs/console/go/#where-can-i-use-it)要求每段对话发送稳定的 `x-opencode-session`，并以客户端自身的 User-Agent 标识请求。

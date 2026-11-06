@@ -11,7 +11,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     let demo = CommandLine.arguments.contains("--demo") || Bundle.main.bundleIdentifier == "local.dsh.selection-toolbar.preview"
     let bridge = CommandLine.arguments.contains("--bridge")
     var panel: FloatingPanel!
-    var statusItem: NSStatusItem!
     var timer: Timer?
     var snapshot: SelectionSnapshot?
     var lastIdentity = ""
@@ -19,7 +18,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     var pendingIdentity = ""
     var toolbarAnchor: NSRect?
     var expanded = false
-    var paused = false
     var trusted = false
     var connected = false
     var busy = false
@@ -67,17 +65,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     var inputSource: DispatchSourceRead?
     var inputBuffer = Data()
     var diagnosticTicks = 0
-    var replacementNotice = 0
+    var replacementNotice: NSPanel?
     let parentPID = getppid()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        guard bridge || demo else {
+            showMessage("请通过 DSH 插件启动", "请在 DeepSeek Harness 的设置中开启 AI 划词工具栏。辅助程序由 DSH 自动管理。")
+            NSApp.terminate(nil); return
+        }
         // Standard responder-chain shortcuts for the field editor and rendered text.
+        // The host owns the lifecycle; there is no separate Quit command.
         let mainMenu = NSMenu()
-        let applicationItem = NSMenuItem(); let applicationMenu = NSMenu()
-        let quitItem = NSMenuItem(title: "退出划词工具栏", action: #selector(quitHelper), keyEquivalent: "q")
-        quitItem.target = self; applicationMenu.addItem(quitItem); applicationItem.submenu = applicationMenu
-        mainMenu.addItem(applicationItem)
+        let applicationItem = NSMenuItem(); applicationItem.submenu = NSMenu(); mainMenu.addItem(applicationItem)
         let editItem = NSMenuItem(); let editMenu = NSMenu(title: "编辑")
         for (title, selector, key) in [("撤销", "undo:", "z"), ("剪切", "cut:", "x"), ("复制", "copy:", "c"),
                                        ("粘贴", "paste:", "v"), ("全选", "selectAll:", "a")] {
@@ -92,7 +92,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.isMovableByWindowBackground = true; panel.delegate = self
-        createMenu()
         trusted = AXIsProcessTrusted()
         if bridge { connectInput(); send(["type": "hello"]) }
         if demo {
@@ -110,7 +109,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
                 }
             }
         } else if !trusted { showPermission() }
-        else if !bridge { showMessage("请通过 DSH 插件启动", "辅助程序由 DSH 插件自动管理。请先安装插件并启动 DeepSeek Harness。") }
         timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in self?.tick() }
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 { self?.closePanel(); return nil }
@@ -125,31 +123,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showSettings(); return true
     }
-    func createMenu() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "划词"
-        let menu = NSMenu()
-        let title = NSMenuItem(title: "DSH AI 划词工具栏", action: nil, keyEquivalent: ""); title.isEnabled = false; menu.addItem(title)
-        menu.addItem(.separator())
-        let pause = NSMenuItem(title: "暂停划词", action: #selector(togglePause(_:)), keyEquivalent: ""); pause.target = self; menu.addItem(pause)
-        let permissions = NSMenuItem(title: "辅助功能权限…", action: #selector(openPermissions), keyEquivalent: ""); permissions.target = self; menu.addItem(permissions)
-        let refresh = NSMenuItem(title: "刷新模型列表", action: #selector(refreshModels), keyEquivalent: ""); refresh.target = self; menu.addItem(refresh)
-        let settings = NSMenuItem(title: "划词设置…", action: #selector(showSettings), keyEquivalent: ""); settings.target = self; menu.addItem(settings)
-        menu.addItem(.separator())
-        let quit = NSMenuItem(title: "退出划词工具栏", action: #selector(quitHelper), keyEquivalent: ""); quit.target = self; menu.addItem(quit)
-        statusItem.menu = menu
-    }
-    @objc func togglePause(_ item: NSMenuItem) {
-        paused.toggle(); item.title = paused ? "恢复划词" : "暂停划词"
-        statusItem.button?.title = paused ? "划词 ∥" : "划词"
-        if paused { closePanel() }
-    }
     @objc func refreshModels() {
         settingsStatus?.stringValue = "正在读取 DSH 模型列表…"
         send(["type": "models"])
         if demo { populateModels() }
     }
-    @objc func quitHelper() { send(["type": "cancel"]); NSApp.terminate(nil) }
     @objc func openPermissions() {
         // Only user clicks request the OS permission dialog; never grant permission programmatically.
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
@@ -174,13 +152,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         if bridge && getppid() != parentPID { NSApp.terminate(nil); return }
         let nowTrusted = AXIsProcessTrusted()
         diagnosticTicks += 1
-        if diagnosticTicks % 10 == 0 { send(["type": "status", "trusted": nowTrusted, "connected": connected, "paused": paused, "expanded": expanded, "selectionStatus": reader.diagnostic, "frontmostApp": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "", "mouseButtons": NSEvent.pressedMouseButtons, "panelVisible": panel.isVisible]) }
+        if diagnosticTicks % 10 == 0 { send(["type": "status", "trusted": nowTrusted, "connected": connected, "expanded": expanded, "selectionStatus": reader.diagnostic, "frontmostApp": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "", "mouseButtons": NSEvent.pressedMouseButtons, "panelVisible": panel.isVisible]) }
         if nowTrusted != trusted {
             trusted = nowTrusted
             if trusted { permissionWindow?.close(); permissionWindow = nil }
             else { closePanel(); showPermission() }
         }
-        guard !demo, bridge, connected, trusted, !paused, !expanded else { return }
+        guard !demo, bridge, connected, trusted, !expanded else { return }
         if NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier { return }
         if NSEvent.pressedMouseButtons != 0 { return }
         if !reader.hasMouseSelection {
@@ -245,6 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         showToolbar(around: NSRect(x: point.x, y: point.y, width: 1, height: 1))
     }
     func showToolbar(around anchor: NSRect) {
+        replacementNotice?.orderOut(nil)
         expanded = false; pinned = false
         let view = newSurface(); view.radius = 10
         let buttons = [
@@ -442,6 +421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         let modelItem = NSMenuItem(title: "选择模型", action: nil, keyEquivalent: ""); modelItem.submenu = modelMenu; modelItem.isEnabled = !busy
         menu.addItem(modelItem)
         let refresh = NSMenuItem(title: "刷新模型列表", action: #selector(refreshModels), keyEquivalent: ""); refresh.target = self; menu.addItem(refresh)
+        let permissions = NSMenuItem(title: "辅助功能权限…", action: #selector(openPermissions), keyEquivalent: ""); permissions.target = self; menu.addItem(permissions)
         menu.addItem(.separator())
         if demo {
             let note = NSMenuItem(title: "界面预览 · 不调用模型或修改原文", action: nil, keyEquivalent: ""); note.isEnabled = false; menu.addItem(note)
@@ -573,20 +553,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
             if success {
                 self.closePanel()
                 if let error {
-                    // Status stays in the menu bar; do not reopen the answer panel
-                    // and steal focus after a paste whose result is unavailable.
-                    self.replacementNotice += 1
-                    let notice = self.replacementNotice
-                    self.statusItem.button?.title = "划词 · 已发送替换"
-                    self.statusItem.button?.toolTip = error
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                        guard self.replacementNotice == notice else { return }
-                        self.statusItem.button?.title = self.paused ? "划词 ∥" : "划词"
-                        self.statusItem.button?.toolTip = nil
-                    }
+                    self.showReplacementNotice(error)
                 }
             }
             else { self.panel.makeKeyAndOrderFront(nil); self.showStatus(error ?? "未完成替换") }
+        }
+    }
+    func showReplacementNotice(_ message: String) {
+        // A nonactivating notice preserves the editor's focus after pasting.
+        replacementNotice?.orderOut(nil)
+        let size = NSSize(width: 360, height: 76)
+        let screen = NSScreen.screens.first { $0.frame.intersects(panel.frame) } ?? NSScreen.main!
+        let frame = toolbarFrame(around: toolbarAnchor ?? panel.frame, size: size, visibleFrame: screen.visibleFrame)
+        let notice = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        notice.level = .floating; notice.hidesOnDeactivate = false; notice.isFloatingPanel = true
+        notice.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        notice.isOpaque = false; notice.backgroundColor = .clear; notice.hasShadow = true
+        notice.ignoresMouseEvents = true
+        let view = SurfaceView(frame: NSRect(origin: .zero, size: size))
+        let title = label("已发送替换，请检查原文"); title.frame = NSRect(x: 14, y: 10, width: 332, height: 22)
+        let detail = label(message, small: true); detail.frame = NSRect(x: 14, y: 34, width: 332, height: 32)
+        view.addSubview(title); view.addSubview(detail); notice.contentView = view
+        replacementNotice = notice; notice.orderFrontRegardless()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self, weak notice] in
+            notice?.orderOut(nil)
+            if self?.replacementNotice === notice { self?.replacementNotice = nil }
         }
     }
     func closePanel() {

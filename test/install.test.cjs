@@ -10,7 +10,7 @@ for(const def of Object.values(definitions)) {
  test(`${def.id}: migrate direct row to idempotent config override`,()=>{
   const unrelated='- id: other\n  config:\n    expression: !!js process.env.VALUE\n';
   const old=`${unrelated}# BEGIN managed ${def.marker}\n- insert:\n    - id: ${def.id}\n      name: /legacy/index.mjs\n# END managed ${def.marker}\n`;
-  const config={workspaceRoot:'/example',dataDir:'/data'};
+  const config={workspaceRoot:'/example',dataDir:'/data',enabled:false};
   const next=rewrite(old,def,config,yaml);
   assert.ok(next.startsWith(unrelated));
   const rows=yaml.parse(next);assert.equal(rows.length,2);assert.equal(rows[1].id,def.id);assert.equal(rows[1].name,def.package);assert.deepEqual(rows[1].config,config);assert.equal(rows[1].insert,undefined);
