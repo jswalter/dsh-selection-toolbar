@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { ConversationEngine } from './engine.mjs';
 
 export const name = 'selection-toolbar';
-export const inject = ['llm', 'agentDefaultModel'];
+export const inject = ['llm', 'agentDefaultModel', 'settings'];
 const root = dirname(fileURLToPath(import.meta.url));
 
 // Generic protocol overrides bypass the host's built-in OpenCode header wrapper.
@@ -63,10 +63,11 @@ export async function apply(ctx, config = {}) {
   const executable = config.helperPath ?? join(root, 'build', 'DSH Selection.app', 'Contents', 'MacOS', 'DSHSelection');
   await access(executable);
   const sdk = config.llmModule ? await import(pathToFileURL(config.llmModule).href) : await import('@deepseek-ai/dsh-llm');
-  if (!sdk.BlockAssembler || !ctx.llm.prepareCall || !ctx.agentDefaultModel.currentSelection) throw new Error('DSH 接口不兼容，需要 0.2.1-rc.5 的模型接口');
+  if (!sdk.BlockAssembler || !ctx.llm.prepareCall || !ctx.agentDefaultModel.currentSelection) throw new Error('DSH 接口不兼容，需要 0.2.2-rc.1 的模型及设置接口');
   const dataRoot = config.dataDir ?? join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'selection-toolbar');
   await mkdir(join(dataRoot, 'conversations'), { recursive: true, mode: 0o700 });
 
+  ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber));
   ctx.effect(() => {
     let disposed = false;
     const helper = spawn(executable, ['--bridge'], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env } });
@@ -84,6 +85,7 @@ export async function apply(ctx, config = {}) {
       },
     });
     const disposeHeaders = registerOpenCodeHeaders(ctx, engine);
+    const preferences = registerPreferences(ctx, config, emit);
     let requests = Promise.resolve();
     let generation = 0;
     async function catalog() {
@@ -99,7 +101,12 @@ export async function apply(ctx, config = {}) {
         await writeFile(join(dataRoot, 'status.json'), JSON.stringify({ ...status, pid: helper.pid, updatedAt: new Date().toISOString() }), { mode: 0o600 });
         return;
       }
-      if (input.type === 'hello' || input.type === 'models') return catalog();
+      if (input.type === 'hello') {
+        await preferences.initialize(input.preferences);
+        return catalog();
+      }
+      if (input.type === 'preferences') return preferences.update(input.changes);
+      if (input.type === 'models') return catalog();
       if (input.type === 'cancel') { engine.cancel(); return; }
       if (input.type === 'clear') { generation++; engine.clear(); return; }
       if (input.type === 'ask' || input.type === 'followup') {
@@ -124,9 +131,51 @@ export async function apply(ctx, config = {}) {
     return () => {
       disposed = true;
       disposeHeaders();
+      preferences.dispose();
       engine.clear();
       helper.stdin.end();
       helper.kill('SIGTERM');
     };
   }, 'macOS selection toolbar');
+}
+
+// Both settings surfaces use the same persisted host preferences. Native writes
+// only name fields actually changed, so a language edit cannot revert a model.
+export function registerPreferences(ctx, config, emit) {
+  let disposed = false;
+  let writes = Promise.resolve();
+  const sync = () => {
+    const value = config.preferences.get();
+    if (!disposed && value != null) emit({ type: 'preferences', preferences: value });
+  };
+  const stop = ctx.on('loader/volatile-update', sync);
+  function enqueue(work) {
+    writes = writes.catch(() => {}).then(async () => {
+      if (disposed) return;
+      try { await work(); sync(); }
+      catch {
+        sync();
+        emit({ type: 'notice', message: '设置未保存，请在 DSH 插件设置中重试' });
+      }
+    });
+    return writes;
+  }
+  return {
+    initialize(value) {
+      return enqueue(async () => {
+        if (config.preferences.get() == null) {
+          await ctx.settings.mutate('selection-toolbar', [{ op: 'set', path: ['preferences'], value: value ?? {} }]);
+        }
+      });
+    },
+    update(changes) {
+      return enqueue(async () => {
+        if (!changes || typeof changes !== 'object' || Array.isArray(changes)) throw new Error('Invalid preferences');
+        const keys = Object.keys(changes);
+        if (!keys.length || keys.some(key => !['paused', 'route', 'sourceLanguage', 'targetLanguage'].includes(key))) throw new Error('Invalid preference field');
+        await ctx.settings.mutate('selection-toolbar', keys.map(key => ({ op: 'set', path: ['preferences', key], value: changes[key] })));
+      });
+    },
+    dispose() { disposed = true; stop(); },
+  };
 }

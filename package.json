@@ -1,21 +1,34 @@
 {
   "name": "dsh-selection-toolbar",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "macOS 全局划词：语法修正、翻译、解释、追问及原位替换，使用 DSH 模型路由。",
-  "main": "index.mjs",
+  "main": "host.mjs",
   "exports": {
-    ".": "./index.mjs",
+    ".": "./host.mjs",
     "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg"
+    "./icon": "./icon.svg",
+    "./client": "./client.js"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
     }
   },
   "files": [
+    "host.mjs",
+    "config.mjs",
+    "client.js",
     "index.mjs",
     "engine.mjs",
     "cordis.patch.yml",
@@ -42,5 +55,8 @@
   "homepage": "https://github.com/jswalter/dsh-selection-toolbar#readme",
   "bugs": {
     "url": "https://github.com/jswalter/dsh-selection-toolbar/issues"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.19.0"
   }
 }

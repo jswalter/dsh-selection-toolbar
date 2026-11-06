@@ -11,7 +11,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     let demo = CommandLine.arguments.contains("--demo") || Bundle.main.bundleIdentifier == "local.dsh.selection-toolbar.preview"
     let bridge = CommandLine.arguments.contains("--bridge")
     var panel: FloatingPanel!
-    var statusItem: NSStatusItem!
     var timer: Timer?
     var snapshot: SelectionSnapshot?
     var lastIdentity = ""
@@ -67,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     var inputSource: DispatchSourceRead?
     var inputBuffer = Data()
     var diagnosticTicks = 0
-    var replacementNotice = 0
+    var noticePanel: FloatingPanel?
     let parentPID = getppid()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -84,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
             editMenu.addItem(NSMenuItem(title: title, action: Selector(selector), keyEquivalent: key))
         }
         editItem.submenu = editMenu; mainMenu.addItem(editItem); NSApp.mainMenu = mainMenu
+        paused = UserDefaults.standard.bool(forKey: "paused")
         restoreLanguages()
         if let stored = UserDefaults.standard.dictionary(forKey: "route") as? [String: String], stored["provider"] != nil, stored["model"] != nil { selectedRoute = stored }
         panel = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 340, height: 52),
@@ -92,9 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
         panel.isMovableByWindowBackground = true; panel.delegate = self
-        createMenu()
         trusted = AXIsProcessTrusted()
-        if bridge { connectInput(); send(["type": "hello"]) }
+        if bridge { connectInput(); send(["type": "hello", "preferences": savedPreferences()]) }
         if demo {
             connected = true; sourceText = "This are a simple test. She go to school yesterday."
             showToolbar(at: NSPoint(x: 600, y: 700))
@@ -125,24 +124,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showSettings(); return true
     }
-    func createMenu() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "划词"
-        let menu = NSMenu()
-        let title = NSMenuItem(title: "DSH AI 划词工具栏", action: nil, keyEquivalent: ""); title.isEnabled = false; menu.addItem(title)
-        menu.addItem(.separator())
-        let pause = NSMenuItem(title: "暂停划词", action: #selector(togglePause(_:)), keyEquivalent: ""); pause.target = self; menu.addItem(pause)
-        let permissions = NSMenuItem(title: "辅助功能权限…", action: #selector(openPermissions), keyEquivalent: ""); permissions.target = self; menu.addItem(permissions)
-        let refresh = NSMenuItem(title: "刷新模型列表", action: #selector(refreshModels), keyEquivalent: ""); refresh.target = self; menu.addItem(refresh)
-        let settings = NSMenuItem(title: "划词设置…", action: #selector(showSettings), keyEquivalent: ""); settings.target = self; menu.addItem(settings)
-        menu.addItem(.separator())
-        let quit = NSMenuItem(title: "退出划词工具栏", action: #selector(quitHelper), keyEquivalent: ""); quit.target = self; menu.addItem(quit)
-        statusItem.menu = menu
-    }
     @objc func togglePause(_ item: NSMenuItem) {
-        paused.toggle(); item.title = paused ? "恢复划词" : "暂停划词"
-        statusItem.button?.title = paused ? "划词 ∥" : "划词"
+        paused.toggle(); UserDefaults.standard.set(paused, forKey: "paused")
+        send(["type": "preferences", "changes": ["paused": paused]])
         if paused { closePanel() }
+    }
+    func savedPreferences() -> [String: Any] {
+        return ["paused": paused, "route": selectedRoute as Any? ?? NSNull(),
+                "sourceLanguage": UserDefaults.standard.string(forKey: "sourceLanguage") ?? "auto",
+                "targetLanguage": UserDefaults.standard.string(forKey: "targetLanguage") ?? "zh-Hans"]
+    }
+    func applyPreferences(_ value: [String: Any]) {
+        paused = value["paused"] as? Bool ?? false
+        UserDefaults.standard.set(paused, forKey: "paused")
+        selectedRoute = value["route"] as? [String: String]
+        if let selectedRoute { UserDefaults.standard.set(selectedRoute, forKey: "route") }
+        else { UserDefaults.standard.removeObject(forKey: "route") }
+        if let source = value["sourceLanguage"] as? String { UserDefaults.standard.set(source, forKey: "sourceLanguage") }
+        if let target = value["targetLanguage"] as? String { UserDefaults.standard.set(target, forKey: "targetLanguage") }
+        // Keep an in-progress translation's selected languages and request intact.
+        if !expanded { restoreLanguages() }
+        if paused { closePanel() }
+        populateModels()
     }
     @objc func refreshModels() {
         settingsStatus?.stringValue = "正在读取 DSH 模型列表…"
@@ -429,6 +432,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     @objc func showOptions(_ sender: NSButton) {
         let menu = NSMenu()
         let settings = NSMenuItem(title: "划词设置…", action: #selector(showSettings), keyEquivalent: ""); settings.target = self; menu.addItem(settings)
+        let pause = NSMenuItem(title: paused ? "恢复划词" : "暂停划词", action: #selector(togglePause(_:)), keyEquivalent: "")
+        pause.target = self; menu.addItem(pause)
+        let permissions = NSMenuItem(title: "辅助功能权限…", action: #selector(openPermissions), keyEquivalent: "")
+        permissions.target = self; menu.addItem(permissions)
         let modelMenu = NSMenu()
         let defaultItem = NSMenuItem(title: "跟随 DSH 默认模型", action: #selector(selectModel(_:)), keyEquivalent: "")
         defaultItem.target = self; defaultItem.tag = 0; defaultItem.state = selectedRoute == nil ? .on : .off
@@ -466,6 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
             selectedRoute = ["provider": models[index - 1]["provider"]!, "model": models[index - 1]["model"]!]
             UserDefaults.standard.set(selectedRoute, forKey: "route")
         } else { selectedRoute = nil; UserDefaults.standard.removeObject(forKey: "route") }
+        send(["type": "preferences", "changes": ["route": selectedRoute as Any? ?? NSNull()]])
         populateModels()
         if expanded { showStatus("模型将在重新生成或下次划词时生效") }
     }
@@ -514,6 +522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
         targetLanguage = languages[targetPicker.indexOfSelectedItem].0
         UserDefaults.standard.set(sourceLanguage, forKey: "sourceLanguage")
         UserDefaults.standard.set(targetLanguage, forKey: "targetLanguage")
+        send(["type": "preferences", "changes": ["sourceLanguage": sourceLanguage, "targetLanguage": targetLanguage]])
         retry()
     }
     func swapLanguages() {
@@ -573,20 +582,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
             if success {
                 self.closePanel()
                 if let error {
-                    // Status stays in the menu bar; do not reopen the answer panel
-                    // and steal focus after a paste whose result is unavailable.
-                    self.replacementNotice += 1
-                    let notice = self.replacementNotice
-                    self.statusItem.button?.title = "划词 · 已发送替换"
-                    self.statusItem.button?.toolTip = error
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
-                        guard self.replacementNotice == notice else { return }
-                        self.statusItem.button?.title = self.paused ? "划词 ∥" : "划词"
-                        self.statusItem.button?.toolTip = nil
-                    }
+                    self.showReplacementNotice(error)
                 }
             }
             else { self.panel.makeKeyAndOrderFront(nil); self.showStatus(error ?? "未完成替换") }
+        }
+    }
+    func showReplacementNotice(_ message: String) {
+        noticePanel?.orderOut(nil)
+        let notice = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 340, height: 86),
+                                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        notice.level = .floating; notice.isOpaque = false; notice.backgroundColor = .clear
+        notice.hasShadow = true; notice.ignoresMouseEvents = true
+        notice.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        let view = SurfaceView(frame: NSRect(x: 0, y: 0, width: 340, height: 86))
+        let text = NSTextField(wrappingLabelWithString: "已发送替换，请检查原文。\n" + message)
+        text.frame = NSRect(x: 16, y: 12, width: 308, height: 62); text.font = .systemFont(ofSize: 12)
+        view.addSubview(text); notice.contentView = view
+        let frame = (panel.screen ?? NSScreen.main)?.visibleFrame ?? panel.frame
+        notice.setFrameOrigin(NSPoint(x: frame.maxX - 360, y: frame.maxY - 106))
+        noticePanel = notice; notice.orderFrontRegardless()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self, weak notice] in
+            notice?.orderOut(nil)
+            if self?.noticePanel === notice { self?.noticePanel = nil }
         }
     }
     func closePanel() {
@@ -617,6 +635,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     }
     func receive(_ value: [String: Any]) {
         let type = value["type"] as? String ?? ""
+        if type == "preferences", let preferences = value["preferences"] as? [String: Any] { applyPreferences(preferences); return }
         if type == "ready" {
             connected = true; models = value["models"] as? [[String: String]] ?? []
             defaultRoute = value["defaultRoute"] as? [String: String]

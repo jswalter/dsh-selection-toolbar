@@ -59,3 +59,7 @@ Electron 官方文档说明，macOS 辅助技术可通过 `AXManualAccessibility
 ## 0.1.6 鼠标事件坐标
 
 Apple 文档说明 [全局事件监听的回调异步交付](https://developer.apple.com/documentation/appkit/nsevent/addglobalmonitorforevents(matching:handler:))，因此回调执行时的 `NSEvent.mouseLocation` 不等同于事件发生位置。手势锚点改读事件本身的 `CGEvent.location`，再转换为 AppKit 屏幕坐标；复制选文与 AX 选文不一致时，不采信该 AX 范围的矩形。定位不能通过整行/整控件矩形推断实际文字边缘。
+
+## 2026-11-06 插件详情设置
+
+核对本机 DSH 0.2.2-rc.1 的公开包文档和实现：`dsh-client-ui-plugin-manager` 提供按包名注册的 `plugins.bundle.config`，及按包名和行 ID 注册的 `plugins.row.config`；浏览器入口通过 manifest 的 `dsh.client` 和 `./client` 导出加载。`dsh-settings` 将 Config 的 `.volatile()` 字段投影为配置表单，`ctx.configForms.get(entryId).mutate(ops, revision)` 负责持久化和冲突检查。宿主通过 `loader/volatile-update` 接收实时配置变化；模型目录使用公开 `ctx.remote.session.modelCatalog()`。不修改 DSH 应用包、不注入页面 DOM。
