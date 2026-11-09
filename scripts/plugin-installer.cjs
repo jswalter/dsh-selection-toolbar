@@ -6,13 +6,13 @@ const os = require('node:os');
 const { createRequire } = require('node:module');
 const { spawnSync } = require('node:child_process');
 const definitions = {
-  selection: { directory: 'selection-toolbar', id: 'selection-toolbar', package: 'dsh-selection-toolbar', marker: 'dsh-selection-toolbar' },
+  selection: { directory: 'selection-toolbar', id: 'selection-toolbar', package: '@jswalter/dsh-selection-toolbar', legacyPackage: 'dsh-selection-toolbar', marker: 'dsh-selection-toolbar' },
 };
 function argumentsOf(argv) {
   const result = {};
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
-    if (['--dry-run', '--uninstall', '--help', '--local'].includes(key)) result[key.slice(2)] = true;
+    if (['--dry-run', '--uninstall', '--help', '--local', '--git'].includes(key)) result[key.slice(2)] = true;
     else if (['--home', '--resources', '--workspace'].includes(key) && argv[i + 1]) result[key.slice(2)] = argv[++i];
     else throw new Error(`Unknown option: ${key}`);
   }
@@ -39,13 +39,13 @@ function rewrite(text, def, config, yaml, uninstall = false) {
 async function main(kind, argv = process.argv.slice(2)) {
   const def = definitions[kind]; if (!def) throw new Error('Unknown local plugin');
   const args = argumentsOf(argv);
-  if (args.help) { console.log('--workspace PATH --resources PATH --home PATH --dry-run --uninstall --local'); return; }
+  if (args.help) { console.log('--workspace PATH --resources PATH --home PATH --dry-run --uninstall --local --git'); return; }
   const resources = path.resolve(args.resources || '/Applications/DeepSeek Harness.app/Contents/Resources');
   const req = createRequire(path.join(resources, 'app.asar', 'dsh', 'package.json'));
   const yaml = req('yaml');
   const source = path.resolve(__dirname, '..');
   const remote = `git+https://github.com/jswalter/dsh-${def.directory}.git#main`;
-  const specifier = args.local ? `link:${source}` : remote;
+  const specifier = args.local ? `link:${source}` : args.git ? remote : 'latest';
   const home = path.resolve(args.home || process.env.DSH_HOME || path.join(os.homedir(), '.dsh'));
   const profile = path.join(home, 'profiles', 'desktop');
   const patchFile = path.join(profile, 'cordis.patch.yml');
@@ -78,41 +78,30 @@ async function main(kind, argv = process.argv.slice(2)) {
   // Re-adding the same Git specifier can reuse the old locked commit. Explicit
   // update resolves the remote branch again while retaining its Git source.
   const previousManifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
-  const updating = !args.local && previousManifest.dependencies?.[def.package] === specifier;
+  const updating = !!args.git && previousManifest.dependencies?.[def.package] === specifier;
   const operation = args.uninstall ? 'remove' : updating ? 'update' : 'add';
   const command = ['plugin', '--profile', 'desktop', operation, ...(args.uninstall ? [def.package] : ['--ignore-scripts', updating ? def.package : `${def.package}@${specifier}`])];
-  if (args['dry-run']) { console.log(JSON.stringify({ package: def.package, source: specifier, command, config, patch: patchFile }, null, 2)); return; }
+  const legacySource = previousManifest.dependencies?.[def.legacyPackage];
+  if (args['dry-run']) { console.log(JSON.stringify({ package: def.package, source: specifier, command, migratingFrom: legacySource ? def.legacyPackage : undefined, config, patch: patchFile }, null, 2)); return; }
   const backup = path.join(home, 'backups', `local-bundle-${kind}-${Date.now()}`);
   fs.mkdirSync(backup, { recursive: true, mode: 0o700 });
   for (const file of ['package.json','cordis.patch.yml','pnpm-lock.yaml']) if (fs.existsSync(path.join(profile,file))) fs.copyFileSync(path.join(profile,file),path.join(backup,file));
   const cli = path.join(resources, 'app.asar', 'dsh', 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js');
-  const run = spawnSync(process.execPath, ['--expose-internals', cli, ...command], { stdio: 'inherit', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', DSH_HOME: home } });
+  const invoke = command => spawnSync(process.execPath, ['--expose-internals', cli, ...command], { stdio: 'inherit', env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', DSH_HOME: home } });
+  if (legacySource && !args.uninstall) {
+    const removed = invoke(['plugin', '--profile', 'desktop', 'remove', def.legacyPackage]);
+    if (removed.status !== 0) throw new Error(`Could not migrate legacy package. Backup: ${backup}`);
+  }
+  const run = invoke(command);
+  if (run.status !== 0 && legacySource && !args.uninstall) {
+    const restored = invoke(['plugin', '--profile', 'desktop', 'add', '--ignore-scripts', `${def.legacyPackage}@${legacySource}`]);
+    if (restored.status !== 0) throw new Error(`Migration and legacy package restore failed. Backup: ${backup}`);
+  }
   if (run.status !== 0) throw new Error(`Official DSH installer failed; patch unchanged. Backup: ${backup}`);
   if ((fs.existsSync(patchFile) ? fs.readFileSync(patchFile,'utf8') : '') !== old) throw new Error(`Config changed during installation; review backup ${backup}`);
   if (kind === 'selection' && !args.uninstall) {
     const installedSource = args.local ? source : fs.realpathSync(path.join(profile, 'node_modules', def.package));
-    const helperApp = path.resolve(config.helperPath, '../../..');
-    const helperPlist = path.join(helperApp, 'Contents', 'Info.plist');
-    let bundleId = 'local.dsh.selection-toolbar';
-    if (fs.existsSync(helperPlist)) {
-      const readId = spawnSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleIdentifier', helperPlist], { encoding: 'utf8' });
-      if (readId.status !== 0 || !/^[A-Za-z0-9][A-Za-z0-9.-]+$/.test(readId.stdout.trim())) throw new Error('Could not read the existing helper identity; application unchanged');
-      bundleId = readId.stdout.trim();
-    }
-    const buildOutput = path.join(backup, 'build');
-    const build = spawnSync('sh', [path.join(installedSource, 'scripts', 'build.sh'), buildOutput], {
-      stdio: 'inherit', env: { ...process.env, DSH_SELECTION_BUNDLE_ID: bundleId, DSH_SELECTION_TMP: process.env.DSH_SELECTION_TMP || path.join(buildOutput, '.cache') },
-    });
-    if (build.status !== 0) throw new Error(`Native build failed; existing helper and patch unchanged. Backup: ${backup}`);
-    if (fs.existsSync(helperApp)) {
-      const saved = spawnSync('/usr/bin/ditto', [helperApp, path.join(backup, 'DSH Selection.app')], { stdio: 'inherit' });
-      if (saved.status !== 0) throw new Error(`Could not back up helper: ${backup}`);
-    }
-    fs.mkdirSync(path.dirname(helperApp), { recursive: true });
-    const copy = spawnSync('/usr/bin/ditto', [path.join(buildOutput, 'DSH Selection.app'), helperApp], { stdio: 'inherit' });
-    if (copy.status !== 0) throw new Error(`Helper copy failed. Restore the application from ${backup}`);
-    fs.accessSync(config.helperPath, fs.constants.X_OK);
-    fs.rmSync(buildOutput, { recursive: true, force: true });
+    await require('./helper-sync.cjs').ensureHelper(installedSource, config.helperPath);
   }
   const temporary = `${patchFile}.local-bundle.tmp`;
   fs.writeFileSync(temporary, next, { mode: 0o600 }); fs.renameSync(temporary, patchFile);

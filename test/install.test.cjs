@@ -26,3 +26,12 @@ test('arguments remain compatible with existing launchers',()=>{
  assert.deepEqual(argumentsOf(['--workspace','/repo','--dry-run']),{workspace:'/repo','dry-run':true});
  assert.throws(()=>argumentsOf(['--unknown']));
 });
+
+test('published bundle parses and resolves its own package',()=>{
+ const fs=require('node:fs');
+ const root=path.join(__dirname,'..');
+ const manifest=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
+ const patch=yaml.parse(fs.readFileSync(path.join(root,'cordis.patch.yml'),'utf8'));
+ assert.equal(patch[0].insert[0].name,manifest.name);
+ assert.equal(Object.values(definitions)[0].package,manifest.name);
+});

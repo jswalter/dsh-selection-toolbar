@@ -1,7 +1,6 @@
 {
-  "name": "dsh-selection-toolbar",
-  "version": "0.2.0",
-  "private": true,
+  "name": "@jswalter/dsh-selection-toolbar",
+  "version": "0.2.1",
   "type": "module",
   "description": "macOS 全局划词：语法修正、翻译、解释、追问及原位替换，使用 DSH 模型路由。",
   "main": "index.mjs",
@@ -57,5 +56,9 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.19.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }

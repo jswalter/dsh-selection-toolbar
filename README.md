@@ -4,7 +4,7 @@
 
 macOS 版 DeepSeek Harness 的全局划词插件。DSH 在后台运行且插件启用时，选中文字后显示 **语法修正 / 翻译 / 解释**；点击后展开流式对话，支持追问、复制回答。语法修正和翻译完成后，均可将完整结果替换回原选区。
 
-当前版本：0.2.0（build 13）。安装和加载验证环境为 DSH Desktop **0.2.2-rc.1**；设置已接入 DSH 插件管理，不再显示 macOS 顶部「划词」图标。本插件针对 macOS，未实现 Windows/Linux 辅助程序。调研依据见 [RESEARCH.md](RESEARCH.md)。
+当前版本：0.2.1（build 14）。安装和加载验证环境为 DSH Desktop **0.2.2-rc.1**；设置已接入 DSH 插件管理，不再显示 macOS 顶部「划词」图标。本插件针对 macOS，未实现 Windows/Linux 辅助程序。调研依据见 [RESEARCH.md](RESEARCH.md)。
 
 ## 安装与更新
 
@@ -21,24 +21,32 @@ sh install.command --dry-run
 sh install.command
 ```
 
-安装前等待 DSH 任务结束并完全退出桌面应用，安装后重新打开。默认通过官方 CLI 安装 `git+https://github.com/jswalter/dsh-selection-toolbar.git#main`；已安装的 JavaScript 位于 DSH profile 的包目录，不链接此源码目录。安装器从**实际安装的包**编译原生应用并执行自检，将完整应用复制到稳定路径，保留原有授权位置。新安装默认使用 `~/.dsh/plugins/selection-toolbar/build/DSH Selection.app`。配置和旧应用会备份到 `$DSH_HOME/backups/local-bundle-selection-*/`。
+首次安装或从旧 GitHub 来源迁移时，等待 DSH 任务结束并完全退出桌面应用，运行安装器后重新打开。安装器默认从 npm 安装 `@jswalter/dsh-selection-toolbar@latest`，写入 DSH profile；已安装代码不链接此源码目录。迁移会将旧包名替换为 `@jswalter/dsh-selection-toolbar`，保留现有配置和辅助功能授权路径，配置备份位于 `$DSH_HOME/backups/local-bundle-selection-*/`。
 
-更新时，退出 DSH 后在本仓库执行：
+### 在 DSH 内更新
+
+完成 npm 来源安装后，使用 **DSH 插件管理页 → 检查更新**，选择新版本更新。检查的是 npm 上发布的更高版本；单独向 GitHub 推送提交不会产生更新提示。若 DSH 提示需要重启，请重启应用。
+
+插件加载时会比较原生源码指纹；源码或包版本发生变化时，自动调用本机 Swift 编译器构建并自检，再替换稳定路径中的辅助应用。首次安装默认使用 `~/.dsh/plugins/selection-toolbar/build/DSH Selection.app`。编译期间加载可能需要一分钟左右；失败时保留旧应用并报告加载错误，不启动版本不匹配的辅助程序。旧应用备份保留在同目录的 `DSH Selection.app.backup-*`。仍需保留 Apple Command Line Tools；若系统要求重新授权辅助功能，按下方说明操作。
+
+### 从 GitHub 安装迁移
+
+旧版安装器仍使用 Git 来源，先更新源码取得新的安装器，再退出 DSH 并执行：
 
 ```sh
 git pull --ff-only
 sh install.command
 ```
 
-每次重新安装都会解析 GitHub 的 `main`，并重新编译实际下载的版本。也可不保留源码，直接运行 DSH 已安装包内的入口：
+`git pull` 只更新源码；`sh install.command` 才会把 DSH 中的安装迁移到 npm。已有 npm 安装也可退出 DSH 后运行安装包内的入口：
 
 ```sh
-sh "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/node_modules/dsh-selection-toolbar/install.command"
+sh "${DSH_HOME:-$HOME/.dsh}/profiles/desktop/node_modules/@jswalter/dsh-selection-toolbar/install.command"
 ```
 
-插件管理页可以更新 JavaScript 包；涉及原生源码时，仍需退出 DSH 并运行上述安装入口，确保 `.app` 同步更新。失败信息会给出本机备份目录；编译失败时旧辅助应用和配置保持原样，但包可能已经更新，可重新运行安装器完成同步。
+非默认应用位置使用 `DSH_APP_PATH='/实际位置/DeepSeek Harness.app'`，自定义配置目录传 `--home '/实际 DSH_HOME'`。`--dry-run` 只预览；`--local` 使用本地开发链接，`--git` 使用 GitHub `main`。后两种来源不参与当前 DSH 的内置版本检查，重新运行默认安装命令可迁回 npm。
 
-非默认应用位置使用 `DSH_APP_PATH='/实际位置/DeepSeek Harness.app'`，自定义配置目录传 `--home '/实际 DSH_HOME'`。`--dry-run` 只预览；`--local` 可供开发时改用本仓库的 `link:`，常规安装不要传此参数。
+若编译失败，原生应用和配置保持原样，但 JavaScript 包可能已经更新；修复编译环境后重新运行安装器或重启 DSH。不要在 DSH 运行时执行外部安装器。
 
 首次运行时，在“系统设置 → 隐私与安全性 → 辅助功能”允许安装预览中 `helperPath` 所属的 `DSH Selection.app`。已有授权路径会保留；系统若因重新签名要求授权，移除旧条目并重新添加实际应用。无需屏幕录制、摄像头或麦克风权限。新安装使用通用应用标识；升级已有应用时读取并保留其标识，以兼容已有授权。
 

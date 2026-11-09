@@ -41,7 +41,7 @@ async function harness() {
       register: (options, component) => { slots.push(options); Component = component; return () => {}; },
     },
   });
-  assert.deepEqual(slots.map(slot => slot.key), ['dsh-selection-toolbar', 'dsh-selection-toolbar#selection-toolbar']);
+  assert.deepEqual(slots.map(slot => slot.key), ['@jswalter/dsh-selection-toolbar', '@jswalter/dsh-selection-toolbar#selection-toolbar']);
   const render = () => { cursor = 0; return Component(); };
   const find = (node, predicate) => predicate(node) ? node : node.children?.map(child => typeof child === 'object' && child ? find(child, predicate) : undefined).find(Boolean);
   return {

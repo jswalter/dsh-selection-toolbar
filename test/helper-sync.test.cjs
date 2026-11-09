@@ -1,0 +1,45 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { ensureHelper } = require('../scripts/helper-sync.cjs');
+
+test('native updates preserve identity, skip unchanged sources, and retain the old app on build failure', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dsh-helper-sync-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const source = path.join(root, 'source');
+  await fs.mkdir(path.join(source, 'native'), { recursive: true });
+  await fs.mkdir(path.join(source, 'scripts'));
+  await fs.writeFile(path.join(source, 'package.json'), '{"version":"1.0.0"}');
+  await fs.writeFile(path.join(source, 'native/main.swift'), 'first');
+  await fs.writeFile(path.join(source, 'scripts/build.sh'), 'build');
+  const app = path.join(root, 'DSH Selection.app');
+  const executable = path.join(app, 'Contents/MacOS/DSHSelection');
+  let builds = 0;
+  const build = async (_source, output, bundleId) => {
+    builds++;
+    assert.equal(bundleId, builds === 1 ? 'local.dsh.selection-toolbar' : 'local.custom.previous');
+    const built = path.join(output, 'DSH Selection.app/Contents');
+    await fs.mkdir(path.join(built, 'MacOS'), { recursive: true });
+    await fs.writeFile(path.join(built, 'MacOS/DSHSelection'), `build ${builds}`, { mode: 0o755 });
+    await fs.writeFile(path.join(built, 'Info.plist'), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>local.custom.previous</string></dict></plist>');
+  };
+  await ensureHelper(source, executable, build);
+  await ensureHelper(source, executable, build);
+  assert.equal(builds, 1);
+  await fs.writeFile(path.join(source, 'native/main.swift'), 'second');
+  await assert.rejects(ensureHelper(source, executable, async () => { throw new Error('compile failed'); }), /compile failed/);
+  assert.equal(await fs.readFile(executable, 'utf8'), 'build 1');
+  await ensureHelper(source, executable, build);
+  assert.equal(await fs.readFile(executable, 'utf8'), 'build 2');
+  assert.ok((await fs.readdir(root)).some(name => name.startsWith('DSH Selection.app.backup-')));
+  await fs.writeFile(path.join(source, 'package.json'), '{"version":"1.0.1"}');
+  await fs.mkdir(`${app}.update-lock`);
+  await assert.rejects(ensureHelper(source, executable, build), { code: 'EEXIST' });
+  assert.equal(await fs.readFile(executable, 'utf8'), 'build 2');
+  await fs.rmdir(`${app}.update-lock`);
+  await ensureHelper(source, executable, build);
+  assert.equal(builds, 3);
+});

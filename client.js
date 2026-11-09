@@ -1,6 +1,6 @@
 /* Browser entry loaded by DSH's public client module loader; no build tool needed. */
 window.__ModuleLoader__.load({
-  id: 'dsh-selection-toolbar',
+  id: '@jswalter/dsh-selection-toolbar',
   factory: require => {
     const React = require('react');
     const h = React.createElement;
@@ -67,8 +67,8 @@ window.__ModuleLoader__.load({
           h('div', { style: { display: 'flex', gap: 12 } }, button(saving ? '保存中…' : '保存设置', undefined, { type: 'submit', disabled: disabled || !draft }), button('重新载入', () => { setDraft(null); setMessage('已载入最新设置。'); }, { disabled: saving })),
           h('p', { role: 'status', style: { margin: 0, fontSize: 13 } }, snapshot.status !== 'ready' ? '划词设置暂不可用，请检查插件状态。' : !snapshot.writable ? '当前设置只读。' : message));
       }
-      ctx.effect(() => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config', key: 'dsh-selection-toolbar' }, Settings)));
-      ctx.effect(() => ctx.slots.inject('plugins.row.config', () => ctx.slots.register({ name: 'plugins.row.config', key: 'dsh-selection-toolbar#selection-toolbar' }, Settings)));
+      ctx.effect(() => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config', key: '@jswalter/dsh-selection-toolbar' }, Settings)));
+      ctx.effect(() => ctx.slots.inject('plugins.row.config', () => ctx.slots.register({ name: 'plugins.row.config', key: '@jswalter/dsh-selection-toolbar#selection-toolbar' }, Settings)));
     }
     return { apply, inject: ['slots', 'configForms', 'remote', 'remote.session'] };
   },

@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import { ConversationEngine } from './engine.mjs';
+import helperSync from './scripts/helper-sync.cjs';
 
 export const Config = settingsSchema(createRequire(import.meta.url)('@deepseek-ai/schemastery'));
 export const name = 'selection-toolbar';
@@ -93,7 +94,8 @@ export function lineReader(onLine, onError, limit = 512000) {
 
 export async function apply(ctx, config = {}) {
   if (process.platform !== 'darwin') throw new Error('AI 划词工具栏目前支持 macOS');
-  const executable = config.helperPath ?? join(root, 'build', 'DSH Selection.app', 'Contents', 'MacOS', 'DSHSelection');
+  const executable = config.helperPath ?? join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'plugins', 'selection-toolbar', 'build', 'DSH Selection.app', 'Contents', 'MacOS', 'DSHSelection');
+  await helperSync.ensureHelper(root, executable);
   const sdk = config.llmModule ? await import(pathToFileURL(config.llmModule).href) : await import('@deepseek-ai/dsh-llm');
   if (!sdk.BlockAssembler || !ctx.llm.prepareCall || !ctx.agentDefaultModel.currentSelection) throw new Error('DSH 接口不兼容，需要 0.2.2-rc.1 的模型及设置接口');
   const dataRoot = config.dataDir ?? join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'selection-toolbar');
