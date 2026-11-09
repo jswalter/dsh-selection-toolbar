@@ -5,7 +5,7 @@ const path = require('node:path');
 const {createRequire} = require('node:module');
 const {rewrite,argumentsOf,definitions} = require('../scripts/plugin-installer.cjs');
 const resources=process.env.DSH_TEST_RESOURCES || '/Applications/DeepSeek Harness.app/Contents/Resources';
-const yaml=createRequire(path.join(resources,'app.asar','dsh','package.json'))('yaml');
+const yaml=process.env.DSH_TEST_RESOURCES ? createRequire(path.join(resources,'app.asar','dsh','package.json'))('yaml') : require('yaml');
 for(const def of Object.values(definitions)) {
  test(`${def.id}: migrate direct row to idempotent config override`,()=>{
   const unrelated='- id: other\n  config:\n    expression: !!js process.env.VALUE\n';

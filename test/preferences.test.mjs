@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { settingsSchema } from '../config.mjs';
 import { registerPreferences } from '../index.mjs';
-const require = createRequire(join(process.env.DSH_TEST_RESOURCES || '/Applications/DeepSeek Harness.app/Contents/Resources', 'app.asar/dsh/package.json'));
+const require = createRequire(process.env.DSH_TEST_RESOURCES ? join(process.env.DSH_TEST_RESOURCES, 'app.asar/dsh/package.json') : import.meta.url);
 const z = require('@deepseek-ai/schemastery');
 const schema = settingsSchema(z);
 const defaults = { paused: false, route: null, sourceLanguage: 'auto', targetLanguage: 'zh-Hans' };

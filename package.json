@@ -1,6 +1,6 @@
 {
   "name": "@jswalter/dsh-selection-toolbar",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
   "description": "macOS 全局划词：语法修正、翻译、解释、追问及原位替换，使用 DSH 模型路由。",
   "main": "index.mjs",
@@ -44,7 +44,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "sh scripts/test.sh"
+    "test": "sh scripts/test.sh",
+    "test:ci": "node --test test/catalog.test.mjs test/client.test.mjs test/helper-sync.test.cjs test/install.test.cjs test/markdown.test.cjs test/preferences.test.mjs test/release.test.cjs"
   },
   "repository": {
     "type": "git",
@@ -60,5 +61,8 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "yaml": "2.9.1"
   }
 }

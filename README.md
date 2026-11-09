@@ -4,7 +4,7 @@
 
 macOS 版 DeepSeek Harness 的全局划词插件。DSH 在后台运行且插件启用时，选中文字后显示 **语法修正 / 翻译 / 解释**；点击后展开流式对话，支持追问、复制回答。语法修正和翻译完成后，均可将完整结果替换回原选区。
 
-当前版本：0.2.1（build 14）。安装和加载验证环境为 DSH Desktop **0.2.2-rc.1**；设置已接入 DSH 插件管理，不再显示 macOS 顶部「划词」图标。本插件针对 macOS，未实现 Windows/Linux 辅助程序。调研依据见 [RESEARCH.md](RESEARCH.md)。
+当前版本：0.2.2（build 15）。安装和加载验证环境为 DSH Desktop **0.2.2-rc.1**；设置已接入 DSH 插件管理，不再显示 macOS 顶部「划词」图标。本插件针对 macOS，未实现 Windows/Linux 辅助程序。调研依据见 [RESEARCH.md](RESEARCH.md)。
 
 ## 安装与更新
 
@@ -93,3 +93,20 @@ sh install.command --uninstall
 ```
 
 命令行卸载通过官方 CLI 移除插件包注册及本插件配置覆盖；也可直接在 DSH 插件管理器卸载。不删除源码、对话、备份和辅助应用；需要永久删除这些本地资料时请自行处理。详细已验证范围记录在 [VALIDATION.md](VALIDATION.md)。
+
+## 维护者：GitHub Release 自动发布 npm
+
+正式 GitHub Release 的 `published` 事件会运行 `.github/workflows/publish.yml`：锁定依赖安装、CI 测试、版本和打包内容校验通过后，通过 npm Trusted Publishing（OIDC）发布到 `latest`。预发布 Release 会跳过。无需在 GitHub 保存 npm 令牌，也不需要逐次在 npm 网页批准。
+
+发布步骤：
+
+1. 提高 `package.json` 和 `package-lock.json` 的版本号，并更新本 README 的当前版本。划词插件还需同步 `native/Info.plist` 的版本号并递增 build。
+2. 完成本机 DSH 集成测试（`sh scripts/test.sh`），提交并推送代码。
+3. 在 GitHub 创建正式 Release，标签必须严格等于 `v` 加包版本号，例如 `v0.2.2`，并指向上述提交。
+4. 等待 Actions 的 **Publish npm package** 成功；流程会等待 npm 扫描，并核对注册表中的包摘要与已测试的安装包一致。之后在 DSH 插件详情的“版本”区点击“重新检查”。
+
+Actions 的 **Run workflow** 只做验证，不发布。若上传已成功但 npm 扫描超时，可待处理结束后重跑失败任务；相同版本且安装包摘要一致会跳过上传，不覆盖已有版本。网络或权限错误会明确失败，不当作“尚未发布”。
+
+两个 npm 包的可信发布配置分别绑定 GitHub 用户 `jswalter`、各自仓库名及 `publish.yml`，允许直接 `npm publish`。工作流无需长期凭据。只有发布正式 Release 才触发 npm 更新，普通提交和仅推送标签不会发布。
+
+云端使用 macOS runner 执行不依赖 DSH 安装的测试；划词插件另外编译并自检 Swift 辅助程序。完整宿主、模型适配器和实时设置集成测试仍需在装有 DSH 的本机运行，云端测试不替代它们。
