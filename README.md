@@ -4,7 +4,7 @@
 
 macOS 版 DeepSeek Harness 的全局划词插件。DSH 在后台运行且插件启用时，选中文字后显示 **语法修正 / 翻译 / 解释**；点击后展开流式对话，支持追问、复制回答。语法修正和翻译完成后，均可将完整结果替换回原选区。
 
-当前版本：0.2.3（build 16）。安装和加载验证环境为 DSH Desktop **0.2.2-rc.1**；设置已接入 DSH 插件管理，不再显示 macOS 顶部「划词」图标。本插件针对 macOS，未实现 Windows/Linux 辅助程序。调研依据见 [RESEARCH.md](RESEARCH.md)。
+当前版本：0.2.4（build 17）。安装和加载验证环境为 DSH Desktop **0.2.2-rc.1**；设置已接入 DSH 插件管理，不再显示 macOS 顶部「划词」图标。本插件针对 macOS，未实现 Windows/Linux 辅助程序。调研依据见 [RESEARCH.md](RESEARCH.md)。
 
 ## 安装与更新
 
