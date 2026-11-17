@@ -66,7 +66,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
     var inputSource: DispatchSourceRead?
     var inputBuffer = Data()
     var diagnosticTicks = 0
-    var noticePanel: FloatingPanel?
     let parentPID = getppid()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -580,30 +579,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTe
             guard let self else { return }
             if success {
                 self.closePanel()
-                if let error {
-                    self.showReplacementNotice(error)
-                }
             }
             else { self.panel.makeKeyAndOrderFront(nil); self.showStatus(error ?? "未完成替换") }
-        }
-    }
-    func showReplacementNotice(_ message: String) {
-        noticePanel?.orderOut(nil)
-        let notice = FloatingPanel(contentRect: NSRect(x: 0, y: 0, width: 340, height: 86),
-                                   styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        notice.level = .floating; notice.isOpaque = false; notice.backgroundColor = .clear
-        notice.hasShadow = true; notice.ignoresMouseEvents = true
-        notice.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        let view = SurfaceView(frame: NSRect(x: 0, y: 0, width: 340, height: 86))
-        let text = NSTextField(wrappingLabelWithString: "已发送替换，请检查原文。\n" + message)
-        text.frame = NSRect(x: 16, y: 12, width: 308, height: 62); text.font = .systemFont(ofSize: 12)
-        view.addSubview(text); notice.contentView = view
-        let frame = (panel.screen ?? NSScreen.main)?.visibleFrame ?? panel.frame
-        notice.setFrameOrigin(NSPoint(x: frame.maxX - 360, y: frame.maxY - 106))
-        noticePanel = notice; notice.orderFrontRegardless()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self, weak notice] in
-            notice?.orderOut(nil)
-            if self?.noticePanel === notice { self?.noticePanel = nil }
         }
     }
     func closePanel() {
